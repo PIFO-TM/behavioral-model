@@ -34,18 +34,19 @@
 #include <vector>
 #include <functional>
 
-// TODO(antonin)
-// experimental support for priority queueing
+// TODO(Steve)
+// experimental support for PIFO queueing
 // to enable it, uncomment this flag
-// you can also choose the field from which the priority value will be read, as
-// well as the number of priority queues per port
-// PRIORITY 0 IS THE LOWEST PRIORITY
-// #define SSWITCH_PRIORITY_QUEUEING_ON
+// you can also choose the field from which the priority value will be read
+// PRIORITY 0 IS THE HIGHEST PRIORITY
+#define SSWITCH_PIFO_QUEUEING_ON
 
-#ifdef SSWITCH_PRIORITY_QUEUEING_ON
-#define SSWITCH_PRIORITY_QUEUEING_NB_QUEUES 8
-#define SSWITCH_PRIORITY_QUEUEING_SRC "intrinsic_metadata.priority"
+#ifdef SSWITCH_PIFO_QUEUEING_ON
+#define SSWITCH_PIFO_QUEUEING_SRC "intrinsic_metadata.priority"
 #endif
+
+// TODO(Steve) - two additional metadata fields for the V1Model:
+// intrinsic_metadata.priority & queueing_metadata.rank 
 
 using ts_res = std::chrono::microseconds;
 using std::chrono::duration_cast;
@@ -170,8 +171,8 @@ class SimpleSwitch : public Switch {
   port_t max_port;
   std::vector<std::thread> threads_;
   Queue<std::unique_ptr<Packet> > input_buffer;
-#ifdef SSWITCH_PRIORITY_QUEUEING_ON
-  bm::QueueingLogicPriRL<std::unique_ptr<Packet>, EgressThreadMapper>
+#ifdef SSWITCH_PIFO_QUEUEING_ON
+  bm::PifoQueueingLogic<std::unique_ptr<Packet>, EgressThreadMapper>
 #else
   bm::QueueingLogicRL<std::unique_ptr<Packet>, EgressThreadMapper>
 #endif

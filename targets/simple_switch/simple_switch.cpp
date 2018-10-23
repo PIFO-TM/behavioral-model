@@ -102,10 +102,9 @@ SimpleSwitch::SimpleSwitch(port_t max_port, bool enable_swap)
   : Switch(enable_swap),
     max_port(max_port),
     input_buffer(1024),
-#ifdef SSWITCH_PRIORITY_QUEUEING_ON
+#ifdef SSWITCH_PIFO_QUEUEING_ON
     egress_buffers(max_port, nb_egress_threads,
-                   64, EgressThreadMapper(nb_egress_threads),
-                   SSWITCH_PRIORITY_QUEUEING_NB_QUEUES),
+                   64, EgressThreadMapper(nb_egress_threads)),
 #else
     egress_buffers(max_port, nb_egress_threads,
                    64, EgressThreadMapper(nb_egress_threads)),
@@ -193,8 +192,8 @@ SimpleSwitch::start_and_return_() {
 SimpleSwitch::~SimpleSwitch() {
   input_buffer.push_front(nullptr);
   for (size_t i = 0; i < nb_egress_threads; i++) {
-#ifdef SSWITCH_PRIORITY_QUEUEING_ON
-    egress_buffers.push_front(i, 0, nullptr);
+#ifdef SSWITCH_PIFO_QUEUEING_ON
+    egress_buffers.enqueue(i, 0, nullptr);
 #else
     egress_buffers.push_front(i, nullptr);
 #endif
@@ -309,16 +308,14 @@ SimpleSwitch::enqueue(port_t egress_port, std::unique_ptr<Packet> &&packet) {
           .set(egress_buffers.size(egress_port));
     }
 
-#ifdef SSWITCH_PRIORITY_QUEUEING_ON
-    size_t priority = phv->has_field(SSWITCH_PRIORITY_QUEUEING_SRC) ?
-        phv->get_field(SSWITCH_PRIORITY_QUEUEING_SRC).get<size_t>() : 0u;
-    if (priority >= SSWITCH_PRIORITY_QUEUEING_NB_QUEUES) {
-      bm::Logger::get()->error("Priority out of range, dropping packet");
+#ifdef SSWITCH_PIFO_QUEUEING_ON
+    if (!phv->has_field(SSWITCH_PIFO_QUEUEING_SRC)) {
+      bm::Logger::get()->error("Priority metadata field does not exist, dropping packet");
       return;
     }
-    egress_buffers.push_front(
-        egress_port, SSWITCH_PRIORITY_QUEUEING_NB_QUEUES - 1 - priority,
-        std::move(packet));
+    size_t rank = phv->get_field(SSWITCH_PIFO_QUEUEING_SRC).get<size_t>();
+    BMLOG_DEBUG_PKT(*packet, "Enqueueing packet with rank {}", rank);
+    egress_buffers.enqueue(egress_port, rank, std::move(packet));
 #else
     egress_buffers.push_front(egress_port, std::move(packet));
 #endif
@@ -525,9 +522,10 @@ SimpleSwitch::egress_thread(size_t worker_id) {
   while (1) {
     std::unique_ptr<Packet> packet;
     size_t port;
-#ifdef SSWITCH_PRIORITY_QUEUEING_ON
-    size_t priority;
-    egress_buffers.pop_back(worker_id, &port, &priority, &packet);
+#ifdef SSWITCH_PIFO_QUEUEING_ON
+    size_t rank;
+    egress_buffers.dequeue(worker_id, &port, &rank, &packet);
+    BMLOG_DEBUG_PKT(*packet, "Dequeued packet with rank {}", rank);
 #else
     egress_buffers.pop_back(worker_id, &port, &packet);
 #endif
@@ -550,12 +548,12 @@ SimpleSwitch::egress_thread(size_t worker_id) {
           get_ts().count() - enq_timestamp);
       phv->get_field("queueing_metadata.deq_qdepth").set(
           egress_buffers.size(port));
-      if (phv->has_field("queueing_metadata.qid")) {
-        auto &qid_f = phv->get_field("queueing_metadata.qid");
-#ifdef SSWITCH_PRIORITY_QUEUEING_ON
-        qid_f.set(SSWITCH_PRIORITY_QUEUEING_NB_QUEUES - 1 - priority);
+      if (phv->has_field("queueing_metadata.rank")) {
+        auto &rank_f = phv->get_field("queueing_metadata.rank");
+#ifdef SSWITCH_PIFO_QUEUEING_ON
+        rank_f.set(rank);
 #else
-        qid_f.set(0);
+        rank_f.set(0);
 #endif
       }
     }
