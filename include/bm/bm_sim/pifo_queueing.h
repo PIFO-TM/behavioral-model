@@ -1,4 +1,4 @@
-/* Copyright 2013-present Barefoot Networks, Inc.
+/* Copyright 2018-present P4.org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  */
 
 /*
- * Antonin Bas (antonin@barefootnetworks.com)
+ * Stephen Ibanez (sibanez@stanford.edu)
  *
  */
 
@@ -126,7 +126,9 @@ class PifoQueueingLogic {
     }
     *rank = pifo.top().rank;
     *pifo_id = pifo.top().pifo_id;
-    *pItem = std::move(pifo.top().e);
+    // TODO(antonin): improve / document this
+    // http://stackoverflow.com/questions/20149471/move-out-element-of-std-priority-queue-in-c11
+    *pItem = std::move(const_cast<PE &>(pifo.top()).e);
     pifo.pop();
     auto &p_info = pifos_info.at(*pifo_id);
     p_info.size--;

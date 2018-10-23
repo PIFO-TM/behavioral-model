@@ -22,7 +22,7 @@
 #define SIMPLE_SWITCH_SIMPLE_SWITCH_H_
 
 #include <bm/bm_sim/queue.h>
-#include <bm/bm_sim/queueing.h>
+#include <bm/bm_sim/pifo_queueing.h>
 #include <bm/bm_sim/packet.h>
 #include <bm/bm_sim/switch.h>
 #include <bm/bm_sim/event_logger.h>

@@ -243,7 +243,9 @@ SimpleSwitch::set_all_egress_queue_depths(const size_t depth_pkts) {
 
 int
 SimpleSwitch::set_egress_queue_rate(size_t port, const uint64_t rate_pps) {
+#ifndef SSWITCH_PIFO_QUEUEING_ON
   egress_buffers.set_rate(port, rate_pps);
+#endif
   return 0;
 }
 
